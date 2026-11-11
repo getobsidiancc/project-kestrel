@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kestrel</title>
+<style>
+:root {
+  --bg: #121211; --side: #171716; --panel: #1b1b19; --raise: #232321; --hover: #2a2a27;
+  --line: #2c2b28; --line2: #3b3a36; --text: #ecebe5; --dim: #a3a199; --faint: #6f6d66;
+  --accent: #e3842b; --accent-ink: #1b0f04; --accent-dim: #3a2614;
+  --ok: #8fb573; --warn: #dcb04a; --bad: #df6a52;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13.5px/1.45 var(--sans); }
+body { display: grid; grid-template-columns: 188px 1fr; grid-template-rows: 46px 1fr; height: 100vh; }
+::selection { background: var(--accent); color: var(--accent-ink); }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+
+button { font: inherit; color: var(--text); background: var(--raise); border: 1px solid var(--line2); border-radius: 3px; padding: 5px 12px; cursor: pointer; }
+button:hover:not(:disabled) { background: var(--hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .4; cursor: default; }
+button.go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.go:hover:not(:disabled) { background: #ee923b; }
+button.quiet { background: none; border-color: transparent; color: var(--dim); }
+button.quiet:hover:not(:disabled) { color: var(--text); background: var(--raise); }
+button.warnbtn { color: var(--bad); }
+button.sm { padding: 2px 8px; font-size: 12px; }
+input[type=number], input[type=text], select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line2); border-radius: 3px; padding: 4px 7px; }
+input[type=number] { width: 84px; font-family: var(--mono); font-size: 12.5px; text-align: right; }
+input:focus, select:focus, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; vertical-align: -2px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--faint); font-weight: 500; font-size: 11.5px; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+
+/* ---- frame ---- */
+#top { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; padding: 0 14px 0 0; border-bottom: 1px solid var(--line); background: var(--side); }
+.mark { width: 188px; height: 100%; display: flex; align-items: center; gap: 9px; padding-left: 16px; border-right: 1px solid var(--line); font-weight: 700; letter-spacing: .14em; font-size: 12.5px; }
+.mark i { width: 10px; height: 10px; background: var(--accent); display: inline-block; transform: rotate(45deg); }
+.conn { display: flex; align-items: center; gap: 8px; color: var(--dim); }
+.led { width: 8px; height: 8px; border-radius: 1px; background: var(--faint); }
+.led.on { background: var(--ok); }
+.led.warn { background: var(--warn); }
+#fw { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+.grow { flex: 1; }
+#saveState { color: var(--faint); font-size: 12.5px; }
+#saveState.dirty { color: var(--warn); }
+kbd { font-family: var(--mono); font-size: 11px; color: var(--faint); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; }
+
+nav { background: var(--side); border-right: 1px solid var(--line); padding: 10px 0; overflow-y: auto; }
+nav button { display: flex; width: 100%; align-items: baseline; justify-content: space-between; text-align: left; background: none; border: 0; border-left: 2px solid transparent; border-radius: 0; padding: 7px 14px 7px 16px; color: var(--dim); }
+nav button:hover:not(:disabled) { background: var(--panel); color: var(--text); }
+nav button.on { border-left-color: var(--accent); color: var(--text); background: var(--panel); }
+nav button span { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+nav hr { border: 0; border-top: 1px solid var(--line); margin: 10px 14px; }
+
+main { overflow-y: auto; padding: 22px 26px 90px; }
+.page { display: none; max-width: 1120px; }
+.page.on { display: block; }
+.page > h1 { font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+.page > .lead { color: var(--dim); margin: 0 0 18px; max-width: 720px; }
+h2 { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0 0 12px; }
+h3 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.gap { height: 14px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.between { justify-content: space-between; }
+.dim { color: var(--dim); } .faint { color: var(--faint); }
+.note { color: var(--dim); font-size: 12.5px; margin: 6px 0 0; }
+.msg { border-left: 2px solid var(--line2); padding: 8px 12px; margin: 0 0 16px; color: var(--dim); background: var(--panel); }
+.msg.warn { border-left-color: var(--warn); }
+.msg.bad { border-left-color: var(--bad); color: #f0c4b8; }
+.msg.ok { border-left-color: var(--ok); }
+.msg b { color: var(--text); }
+
+/* settings rows */
+.set { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.set:first-of-type { border-top: 0; }
+.set label { font-weight: 500; }
+.set .note { grid-column: 1 / 3; margin: 0; }
+.set .slide { grid-column: 1 / 3; }
+.unit { color: var(--faint); font-size: 12px; margin-left: 4px; }
+
+/* aim dials */
+.dial { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; align-items: end; }
+.dial .big { font-family: var(--mono); font-size: 38px; line-height: 1; letter-spacing: -.02em; }
+.dial .big small { font-size: 13px; color: var(--faint); letter-spacing: 0; margin-left: 6px; }
+.dial .steps { display: flex; gap: 4px; }
+.dial .steps button { min-width: 74px; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 14px; }
+.facts div { background: var(--panel); padding: 7px 10px; }
+.facts b { display: block; font-family: var(--mono); font-weight: 500; font-size: 13px; }
+.facts span { color: var(--faint); font-size: 11.5px; }
+.off { opacity: .45; pointer-events: none; }
+
+/* keyboard */
+.kbscroll { overflow-x: auto; padding-bottom: 4px; }
+.kb { display: flex; gap: 14px; width: max-content; }
+.kb .blk { display: flex; flex-direction: column; gap: 4px; }
+.kb .r { display: flex; gap: 4px; height: 42px; }
+.key { position: relative; width: 35px; height: 42px; background: var(--raise); border: 1px solid var(--line2); border-radius: 3px; padding: 2px 4px; cursor: pointer; user-select: none; overflow: hidden; }
+.key:hover { border-color: var(--faint); }
+.key .lb { font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+.key .tg { position: absolute; left: 3px; right: 3px; bottom: 2px; font: 600 9.5px/1.15 var(--mono); color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.key.bound { background: #2a2219; border-color: #4d3820; }
+.key.bound .lb { color: var(--text); }
+.key.sel { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 1; }
+.key.held { box-shadow: inset 0 -3px 0 var(--ok); }
+.key.void { visibility: hidden; }
+.mice { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 12px; }
+.mice .key { width: 92px; }
+.keys-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 1250px) { .keys-layout { grid-template-columns: 1fr; } }
+.panel h2 { margin-bottom: 6px; }
+.panel .keyname { font-size: 17px; font-weight: 600; margin: 0 0 10px; }
+.bindrow { border: 1px solid var(--line2); border-radius: 3px; margin-bottom: 6px; background: var(--bg); }
+.bindrow .head { display: flex; align-items: center; justify-content: space-between; padding: 5px 6px 5px 10px; }
+.bindrow .head b { font-weight: 600; }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 8px; }
+.flag { font-size: 11.5px; padding: 1px 7px; color: var(--faint); background: none; border-color: var(--line2); }
+.flag.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.picker { margin-top: 12px; }
+.picker input { width: 100%; margin-bottom: 8px; }
+.pgroup { font-size: 11px; color: var(--faint); letter-spacing: .06em; text-transform: uppercase; margin: 10px 0 4px; }
+.pgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; }
+.pgrid button { text-align: left; padding: 4px 8px; font-size: 12.5px; background: var(--bg); }
+.pgrid button.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--faint); margin-top: 12px; }
+.legend b { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+
+/* list view */
+.alist { columns: 2 380px; column-gap: 14px; }
+.agroup { break-inside: avoid; margin-bottom: 14px; }
+.arow { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.arow .an { width: 150px; flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 3px; font: 12px var(--mono); background: var(--raise); border: 1px solid var(--line2); border-radius: 3px; padding: 1px 2px 1px 7px; }
+.chip i { font-style: normal; color: var(--accent); font-size: 10.5px; }
+.chip button { border: 0; background: none; padding: 0 4px; color: var(--faint); font-size: 13px; line-height: 1; }
+.chip button:hover { color: var(--bad); background: none; }
+.arow.capturing { background: var(--accent-dim); }
+.capmsg { color: var(--accent); font-size: 12.5px; }
+
+/* live */
+.live { display: flex; gap: 34px; align-items: flex-end; justify-content: center; flex-wrap: wrap; padding: 8px 0 4px; }
+.stick { width: 160px; height: 160px; border: 1px solid var(--line2); border-radius: 50%; position: relative; background:
+  linear-gradient(var(--line), var(--line)) center/1px 100% no-repeat, linear-gradient(var(--line), var(--line)) center/100% 1px no-repeat; }
+.stick .dz { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px dashed var(--faint); border-radius: 50%; }
+.stick .kn { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; background: var(--accent); border-radius: 50%; }
+.trig { width: 18px; height: 160px; border: 1px solid var(--line2); position: relative; }
+.trig div { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); }
+.cap { text-align: center; color: var(--faint); font-size: 11.5px; margin-top: 6px; letter-spacing: .05em; }
+.pbtns { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 16px; }
+.pbtns span { font: 12px var(--mono); padding: 3px 9px; border: 1px solid var(--line2); border-radius: 3px; color: var(--faint); }
+.pbtns span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.held { font-family: var(--mono); color: var(--accent); }
+
+/* calibrate */
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 3px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: none; color: var(--dim); }
+.seg button + button { border-left: 1px solid var(--line2); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.readout { font: 26px var(--mono); }
+tr.busy td { background: var(--accent-dim); }
+
+/* curves */
+.chart { width: 100%; height: 210px; display: block; background: var(--bg); border: 1px solid var(--line); }
+.ptab input { width: 72px; }
+
+/* profiles / log */
+.plist .prow { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.log { height: calc(100vh - 230px); min-height: 240px; overflow: auto; background: #0d0d0c; border: 1px solid var(--line); padding: 10px; font: 12px/1.5 var(--mono); color: #c9c7bf; white-space: pre-wrap; }
+
+/* save bar + toast */
+#bar { position: fixed; left: 188px; right: 0; bottom: 0; display: none; align-items: center; gap: 12px; padding: 10px 26px; background: var(--side); border-top: 1px solid var(--warn); z-index: 5; }
+#bar.on { display: flex; }
+#bar .what { color: var(--text); }
+#toast { position: fixed; right: 18px; bottom: 64px; max-width: 420px; background: var(--raise); border: 1px solid var(--line2); border-left: 2px solid var(--dim); padding: 8px 14px; opacity: 0; transform: translateY(6px); transition: opacity .15s, transform .15s; pointer-events: none; z-index: 9; }
+#toast.on { opacity: 1; transform: none; }
+#toast.ok { border-left-color: var(--ok); } #toast.bad { border-left-color: var(--bad); }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; padding: 18px 20px; max-width: 460px; }
+dialog::backdrop { background: rgba(0, 0, 0, .55); }
+dialog h3 { margin-top: 0; }
+dialog ul { padding-left: 18px; margin: 8px 0 14px; color: var(--dim); }
+dialog ul b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+@media (max-width: 760px) {
+  body { grid-template-columns: 1fr; grid-template-rows: 46px auto 1fr; }
+  .mark { width: auto; border-right: 0; padding-right: 10px; }
+  nav { display: flex; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav button { width: auto; border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav button.on { border-bottom-color: var(--accent); }
+  nav button span, nav hr { display: none; }
+  main { padding: 16px 16px 90px; }
+  #bar { left: 0; padding: 10px 16px; }
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div class="mark"><i></i>KESTREL</div>
+  <div class="conn"><span class="led" id="led"></span><span id="connText">Not connected</span></div>
+  <span id="fw"></span>
+  <div class="grow"></div>
+  <span id="saveState"></span>
+  <button id="btnConnect" class="go">Connect</button>
+</div>
+
+<nav id="nav">
+  <button data-p="aim" class="on">Aim <span>1</span></button>
+  <button data-p="keys">Keys <span>2</span></button>
+  <button data-p="live">Live <span>3</span></button>
+  <hr>
+  <button data-p="cal">Calibrate <span>4</span></button>
+  <button data-p="curves">Curves <span>5</span></button>
+  <button data-p="siege">Siege setup <span>6</span></button>
+  <hr>
+  <button data-p="profiles">Backups &amp; profiles <span>7</span></button>
+  <button data-p="log">Log <span>8</span></button>
+</nav>
+
+<main>
+  <div id="msgArea"></div>
+
+  <!-- ================= AIM ================= -->
+  <section class="page on" id="p-aim">
+    <h1>Aim</h1>
+    <p class="lead">How far you move the mouse for a full 360° turn. Lower number = faster. The curves (Calibrate) make it exact, so these numbers behave like your PC sens.</p>
+    <div class="cols">
+      <div class="box">
+        <h2>Hipfire</h2>
+        <div class="dial">
+          <div class="big" id="hipBig">–<small>cm / 360°</small></div>
+          <div class="steps"><button data-step="hip" data-k="0.885">Faster</button><button data-step="hip" data-k="1.13">Slower</button></div>
+        </div>
+        <div class="gap"></div>
+        <input type="range" id="hipcmr" min="3" max="60" step="0.1">
+        <div class="facts">
+          <div><b id="hipDeg">–</b><span>° per mouse count</span></div>
+          <div><b id="hipTop">–</b><span>top turn speed</span></div>
+          <div><b id="hipCap">–</b><span>mouse speed at the cap</span></div>
+        </div>
+        <div class="set"><label for="hipcm">Exact value</label><span><input type="number" id="hipcm" min="0.5" max="500" step="0.1"><span class="unit">cm</span></span></div>
+        <div class="set"><label for="hipy">Vertical speed</label><input type="number" id="hipy" min="0.1" max="10" step="0.05"><p class="note">Up/down compared to left/right. 1.00 = same.</p></div>
+        <div class="set"><label for="fast">Swipe boost</label><span><input type="number" id="fast" min="0" max="250" step="10"><span class="unit">%</span></span>
+          <input class="slide" type="range" id="fastr" min="0" max="250" step="10">
+          <p class="note">Small, slow aim stays exactly at your sens; fast swipes speed up so they reach the console's top speed sooner. 0 = pure 1:1.</p></div>
+      </div>
+
+      <div class="box">
+        <div class="row between"><h2 style="margin:0">Aiming down sights</h2><label class="row" style="gap:6px"><input type="checkbox" id="adson"> separate ADS sens</label></div>
+        <div class="gap"></div>
+        <div id="adsBox">
+          <div class="dial">
+            <div class="big" id="adsBig">–<small>cm / 360°</small></div>
+            <div class="steps"><button data-step="ads" data-k="0.885">Faster</button><button data-step="ads" data-k="1.13">Slower</button></div>
+          </div>
+          <div class="gap"></div>
+          <input type="range" id="adscmr" min="3" max="80" step="0.1">
+          <div class="facts">
+            <div><b id="adsDeg">–</b><span>° per mouse count</span></div>
+            <div><b id="adsTop">–</b><span>top turn speed</span></div>
+            <div><b id="adsCap">–</b><span>mouse speed at the cap</span></div>
+          </div>
+          <div class="set"><label for="adscm">Exact value</label><span><input type="number" id="adscm" min="0.5" max="500" step="0.1"><span class="unit">cm</span></span></div>
+          <div class="set"><label for="adsy">Vertical speed</label><input type="number" id="adsy" min="0.1" max="10" step="0.05"></div>
+        </div>
+        <p class="note" id="adsOffNote" style="display:none">Off: aiming uses the hipfire setup.</p>
+      </div>
+    </div>
+
+    <div class="gap"></div>
+    <div class="cols">
+      <div class="box">
+        <h2>Mouse &amp; feel</h2>
+        <div class="set"><label for="dpi">Mouse DPI</label><input type="number" id="dpi" min="50" max="64000" step="50"><p class="note">Must match what your mouse is set to, or every sens is off by the same factor.</p></div>
+        <div class="set"><label for="window">Speed averaging</label><span><input type="number" id="window" min="1" max="32" step="1"><span class="unit">ms</span></span><p class="note">Lower = less delay. Slow moves are steadied automatically. 2–3 is best.</p></div>
+        <div class="set"><label for="smooth">Smoothing</label><input type="number" id="smooth" min="0" max="0.95" step="0.05"><p class="note">0 = raw (lowest delay). Higher feels floatier.</p></div>
+        <div class="set"><label for="invy">Invert vertical</label><input type="checkbox" id="invy"></div>
+      </div>
+      <div class="box">
+        <h2>Movement &amp; buttons</h2>
+        <div class="set"><label for="walk">Walk speed</label><span><input type="number" id="walk" min="0" max="100" step="5"><span class="unit">%</span></span><p class="note">How far the left stick goes while the Walk key is held.</p></div>
+        <div class="set"><label for="wheel">Scroll-wheel press</label><span><input type="number" id="wheel" min="5" max="250" step="5"><span class="unit">ms</span></span><p class="note">How long one wheel click holds its button.</p></div>
+        <div class="set"><label for="settle">Lean wait after aiming</label><span><input type="number" id="settle" min="0" max="2500" step="10"><span class="unit">ms</span></span><p class="note">"Only while aiming" keys wait this long after aim starts (Siege lean). 0 = default 200 ms.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= KEYS ================= -->
+  <section class="page" id="p-keys">
+    <div class="row between"><div><h1 style="font-size:18px;font-weight:600;margin:0 0 2px">Keys</h1>
+      <p class="lead" style="margin:0 0 14px">Click a key, or press it on the adapter's keyboard or mouse. Then pick what it does.</p></div>
+      <div class="row"><span class="faint mono" id="slots"></span><div class="seg"><button id="vKb" class="on">Keyboard</button><button id="vList">By action</button></div></div></div>
+
+    <div id="kbView" class="keys-layout">
+      <div class="box">
+        <div class="kbscroll"><div class="kb" id="kb"></div></div>
+        <div class="mice" id="mice"></div>
+        <div class="legend"><span><b>AIM</b> only while aiming</span><span><b>TAP</b> single tap</span><span><b>LONG</b> long press</span><span><b>TGL</b> toggle</span><span><b>GDT</b> gadget key</span><span><b>RPD</b> rapid</span></div>
+      </div>
+      <div class="box panel" id="keyPanel"></div>
+    </div>
+
+    <div id="listView" style="display:none">
+      <div class="box"><div class="alist" id="alist"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= LIVE ================= -->
+  <section class="page" id="p-live">
+    <h1>Live</h1>
+    <p class="lead">Exactly what the Xbox receives, about 30 times a second.</p>
+    <div class="box">
+      <div class="live">
+        <div><div class="trig"><div id="ltF" style="height:0"></div></div><div class="cap">LT</div></div>
+        <div><div class="stick"><div class="kn" id="lK"></div></div><div class="cap">LEFT STICK</div></div>
+        <div><div class="stick"><div class="dz" id="rDz"></div><div class="kn" id="rK"></div></div><div class="cap">RIGHT STICK</div></div>
+        <div><div class="trig"><div id="rtF" style="height:0"></div></div><div class="cap">RT</div></div>
+      </div>
+      <div class="pbtns" id="pbtns"></div>
+      <p style="text-align:center;margin:18px 0 0"><span class="faint">Held on the adapter </span><span class="held" id="heldNow">–</span></p>
+    </div>
+  </section>
+
+  <!-- ================= CALIBRATE ================= -->
+  <section class="page" id="p-cal">
+    <h1>Calibrate</h1>
+    <p class="lead">Measures how fast the game turns at each stick position, so mouse moves come out exact. Stand somewhere safe in-game, don't touch the mouse during a test. <b>F12</b> on the adapter's keyboard works as the button, so you can stay on the game screen.</p>
+    <div class="box">
+      <div class="row between">
+        <div class="row"><span class="dim">Measuring</span><div class="seg"><button id="cHip" class="on">Hipfire</button><button id="cAds">ADS (hold aim)</button></div></div>
+        <span class="faint" id="calStatus"></span>
+      </div>
+      <h3>1 · Where the stick starts moving</h3>
+      <p class="note" style="margin:0 0 10px">Start: the stick creeps forward very slowly. Press the second button (or F12) the moment the view starts to turn.</p>
+      <div class="row"><button id="dzStart" class="go">Start</button><button id="dzMoved" disabled>It moved (F12)</button><span class="readout" id="dzNow">0.000</span><span class="dim" id="dzRes"></span></div>
+      <h3>2 · Turn speeds</h3>
+      <p class="note" style="margin:0 0 10px">Per row: face something you'll recognise, Start (or F12), then Stop (or F12) once you've done the number of turns. Slow rows are the most important; you don't need every row.</p>
+      <table id="calTable"></table>
+      <div class="row" style="margin-top:14px"><button id="calUse" class="go" disabled>Use these results</button><span class="dim" id="calNote"></span></div>
+    </div>
+  </section>
+
+  <!-- ================= CURVES ================= -->
+  <section class="page" id="p-curves">
+    <h1>Curves</h1>
+    <p class="lead">How the game turns at each stick position, measured on Calibrate. The adapter reads this backwards to find the stick position for every mouse speed. Usually you don't touch these.</p>
+    <div class="cols" id="curveBoxes"></div>
+    <div class="gap"></div>
+    <div class="box"><div class="set"><label for="dzshape">Game deadzone shape</label><select id="dzshape"><option value="0">Round (most games)</option><option value="1">Square / per axis</option></select></div></div>
+  </section>
+
+  <!-- ================= SIEGE ================= -->
+  <section class="page" id="p-siege">
+    <h1>Siege setup</h1>
+    <p class="lead">Turns your PC Siege settings into adapter sens plus the console settings to match.</p>
+    <div class="cols">
+      <div class="box">
+        <h2>1 · Your PC settings</h2>
+        <p class="note" style="margin:0 0 10px">Documents → My Games → Rainbow Six - Siege → (long folder) → <code>GameSettings.ini</code></p>
+        <div class="row"><button id="siegeFileBtn" class="go">Choose GameSettings.ini</button><input type="file" id="siegeFile" accept=".ini,text/plain" hidden><span class="dim mono" id="siegeFileName"></span></div>
+        <div class="set" style="margin-top:8px"><label for="siegeDpi">Mouse DPI on PC</label><input type="number" id="siegeDpi" min="50" max="64000" step="50"></div>
+        <div class="set"><label for="siegeConFov">Console Siege FOV</label><input type="number" id="siegeConFov" min="60" max="90" step="1" value="90"></div>
+        <div id="siegePc"></div>
+      </div>
+      <div class="box">
+        <h2>2 · Set these on console Siege</h2>
+        <div id="siegeConsole"><p class="dim">Load your settings file first.</p></div>
+      </div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div class="box">
+        <h2>3 · Apply</h2>
+        <p class="note" style="margin:0 0 10px">Copies your PC hipfire, ADS (1x) and vertical speed into the adapter. Calibrate afterwards for exact results.</p>
+        <button id="siegeApply" class="go" disabled>Apply PC sensitivity</button>
+        <div id="siegeApplied"></div>
+      </div>
+      <div class="box">
+        <h2>4 · Scope check</h2>
+        <p class="note" style="margin:0 0 10px">Equip the scope, hold aim, Start; Stop after the number of turns.</p>
+        <div class="row"><select id="scopePick"></select><label class="row" style="gap:6px">turns <input type="number" id="scopeTurns" value="2" min="1" max="20" style="width:56px"></label>
+          <button id="scopeStart" class="go">Start</button><button id="scopeStop" disabled>Stop</button><span class="readout" id="scopeTime">0.00</span></div>
+        <div id="scopeResult"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROFILES ================= -->
+  <section class="page" id="p-profiles">
+    <h1>Backups &amp; profiles</h1>
+    <p class="lead">A backup file is the exact adapter setup: sens, curves and every key. Restoring shows you what will change before anything happens.</p>
+    <div class="cols">
+      <div class="box">
+        <h2>Backup file</h2>
+        <div class="row"><button id="bkSave" class="go">Download backup</button><button id="bkLoadBtn">Restore from file…</button>
+          <input type="file" id="bkLoad" accept=".hex,.json,.txt" hidden></div>
+        <p class="note">Works with <code>profiles\siege-good.hex</code> and older .json exports.</p>
+        <h3>Save in this browser</h3>
+        <div class="row"><input type="text" id="profName" placeholder="Name, e.g. Siege" style="flex:1"><button id="profSave">Save</button></div>
+        <h3>Factory reset</h3>
+        <div class="row"><button id="btnDefaults" class="warnbtn">Reset adapter to defaults</button></div>
+      </div>
+      <div class="box">
+        <h2>Saved in this browser</h2>
+        <div class="plist" id="plist"><p class="dim">Nothing saved yet.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LOG ================= -->
+  <section class="page" id="p-log">
+    <div class="row between" style="margin-bottom:12px"><h1 style="font-size:18px;font-weight:600;margin:0">Log</h1>
+      <div class="row"><input type="text" id="logFilter" placeholder="Filter" style="width:200px"><button id="logCopy">Copy</button><button id="logClear" class="quiet">Clear</button></div></div>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+
+<div id="bar"><span class="what">Changes not saved to the adapter</span><span class="faint" id="barWhat"></span><div class="grow"></div>
+  <button id="btnRevert" class="quiet">Revert</button><button id="btnSave" class="go">Save to adapter <kbd style="color:inherit;border-color:rgba(0,0,0,.3)">Ctrl S</kbd></button></div>
+<div id="toast"></div>
+<dialog id="dlg"><h3 id="dlgTitle"></h3><div id="dlgBody"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button id="dlgNo" class="quiet">Cancel</button><button id="dlgYes" class="go">OK</button></div></dialog>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// =================================================================================
+// Settings layout v2 (must match components/kestrel_link/include/kestrel_cfg.h)
+// =================================================================================
+const KCFG_MAGIC = 0x4354534B, KCFG_VERSION = 2, KCFG_SIZE = 464, MAX_BINDS = 96, MAX_PTS = 8;
+const OFF = { dpi: 8, smooth: 12, invy: 16, dzshape: 17, window: 18, walk: 19, wheel: 20, adsOn: 21, settle: 22, fast: 23, hip: 24, ads: 100, binds: 176 };
+const T = { NONE: 0, LT: 17, RT: 18, UP: 19, DOWN: 20, LEFT: 21, RIGHT: 22, WALK: 23, LUP: 24, LDOWN: 25, LLEFT: 26, LRIGHT: 27, RAPID: 28, RAPIDARM: 29, RAPIDDISARM: 30, FIREPLACE: 31 };
+const BTN = bit => 1 + bit;
+const PAD = { DUP: 0, DDOWN: 1, DLEFT: 2, DRIGHT: 3, START: 4, BACK: 5, LS: 6, RS: 7, LB: 8, RB: 9, GUIDE: 10, A: 12, B: 13, X: 14, Y: 15 };
+const F_TOGGLE = 1, F_AIMONLY = 2, F_TAP = 4, F_LONG = 8, F_RAPID = 16, F_NOTRAPID = 32, F_RAPIDHOLD = 64, F_GADGET = 128;
+
+const FLAGS = [
+  { f: F_AIMONLY, tag: 'AIM', name: 'Only while aiming', tip: 'Does nothing unless aim is held, then fires once aim has settled. Siege lean on the stick clicks.' },
+  { f: F_TAP, tag: 'TAP', name: 'Single tap', tip: 'Every press sends exactly one quick click, however long you hold. Spam-safe.', clears: F_TOGGLE | F_LONG },
+  { f: F_LONG, tag: 'LONG', name: 'Long press', tip: 'One quick press holds the button for half a second.', clears: F_TOGGLE | F_TAP },
+  { f: F_TOGGLE, tag: 'TGL', name: 'Toggle', tip: 'Press once to turn on, again to turn off.', clears: F_TAP | F_LONG },
+  { f: F_GADGET, tag: 'GDT', name: 'Gadget key', tip: 'Pulling out a gadget: the next "Fire / place gadget" press sends X (place) instead of firing. Ends after that press, after 4 s, when you aim, or on weapon swap.' },
+  { f: F_RAPID, tag: 'RPD', name: 'Rapid', tip: 'With rapid mode on and armed, and a rapid-enable key held, holding this clicks over and over (singleplayer).', clears: F_NOTRAPID },
+  { f: F_RAPIDHOLD, tag: 'RPD-EN', name: 'Rapid enable', tip: 'Rapid-click only runs while this key is held. While armed, this bind sends nothing.' },
+  { f: F_NOTRAPID, tag: 'NO-RPD', name: 'Off in rapid mode', tip: 'This bind does nothing while rapid mode is on.', clears: F_RAPID },
+];
+const flagTags = f => FLAGS.filter(x => f & x.f).map(x => x.tag);
+
+const ACTIONS = [
+  { group: 'Movement', items: [
+    { tgt: T.UP, name: 'Forward', s: 'FWD' }, { tgt: T.DOWN, name: 'Back', s: 'BACK' },
+    { tgt: T.LEFT, name: 'Left', s: 'LEFT' }, { tgt: T.RIGHT, name: 'Right', s: 'RIGHT' }, { tgt: T.WALK, name: 'Walk (slower)', s: 'WALK' } ] },
+  { group: 'Triggers & bumpers', items: [
+    { tgt: T.RT, name: 'RT', s: 'RT' }, { tgt: T.LT, name: 'LT (aim)', s: 'LT' },
+    { tgt: T.FIREPLACE, name: 'Fire / place gadget', s: 'RT/X' },
+    { tgt: BTN(PAD.LB), name: 'LB', s: 'LB' }, { tgt: BTN(PAD.RB), name: 'RB', s: 'RB' } ] },
+  { group: 'Face buttons', items: [
+    { tgt: BTN(PAD.A), name: 'A', s: 'A' }, { tgt: BTN(PAD.B), name: 'B', s: 'B' },
+    { tgt: BTN(PAD.X), name: 'X', s: 'X' }, { tgt: BTN(PAD.Y), name: 'Y', s: 'Y' } ] },
+  { group: 'Sticks', items: [
+    { tgt: BTN(PAD.LS), name: 'L3 (left stick click)', s: 'L3' }, { tgt: BTN(PAD.RS), name: 'R3 (right stick click)', s: 'R3' },
+    { tgt: T.LUP, name: 'Look up', s: 'LK↑' }, { tgt: T.LDOWN, name: 'Look down', s: 'LK↓' },
+    { tgt: T.LLEFT, name: 'Look left', s: 'LK←' }, { tgt: T.LRIGHT, name: 'Look right', s: 'LK→' } ] },
+  { group: 'D-pad', items: [
+    { tgt: BTN(PAD.DUP), name: 'D-pad up', s: 'D↑' }, { tgt: BTN(PAD.DDOWN), name: 'D-pad down', s: 'D↓' },
+    { tgt: BTN(PAD.DLEFT), name: 'D-pad left', s: 'D←' }, { tgt: BTN(PAD.DRIGHT), name: 'D-pad right', s: 'D→' } ] },
+  { group: 'System', items: [
+    { tgt: BTN(PAD.BACK), name: 'View', s: 'VIEW' }, { tgt: BTN(PAD.START), name: 'Menu', s: 'MENU' }, { tgt: BTN(PAD.GUIDE), name: 'Xbox button', s: 'XBOX' } ] },
+  { group: 'Rapid-click (singleplayer)', items: [
+    { tgt: T.RAPID, name: 'Rapid mode on/off', s: 'RPD' }, { tgt: T.RAPIDARM, name: 'Rapid arm', s: 'ARM' }, { tgt: T.RAPIDDISARM, name: 'Rapid disarm', s: 'DISARM' } ] },
+];
+const TGT = {};
+for (const g of ACTIONS) for (const a of g.items) TGT[a.tgt] = a;
+const tgtName = t => (TGT[t] || { name: 'target ' + t }).name;
+const tgtShort = t => (TGT[t] || { s: '?' }).s;
+
+// ---- key names ----
+const KEY_NAMES = {};
+for (let i = 0; i < 26; i++) KEY_NAMES[0x04 + i] = String.fromCharCode(65 + i);
+for (let i = 0; i < 9; i++) KEY_NAMES[0x1E + i] = String(i + 1);
+KEY_NAMES[0x27] = '0';
+Object.assign(KEY_NAMES, {
+  0x28: 'Enter', 0x29: 'Esc', 0x2A: 'Backspace', 0x2B: 'Tab', 0x2C: 'Space', 0x2D: '-', 0x2E: '=', 0x2F: '[', 0x30: ']',
+  0x31: '\\', 0x33: ';', 0x34: "'", 0x35: '`', 0x36: ',', 0x37: '.', 0x38: '/', 0x39: 'Caps Lock',
+  0x46: 'PrtSc', 0x47: 'ScrLk', 0x48: 'Pause', 0x49: 'Insert', 0x4A: 'Home', 0x4B: 'PgUp', 0x4C: 'Delete', 0x4D: 'End', 0x4E: 'PgDn',
+  0x4F: '→', 0x50: '←', 0x51: '↓', 0x52: '↑', 0x53: 'Num Lock', 0x54: 'Num /', 0x55: 'Num *', 0x56: 'Num -', 0x57: 'Num +',
+  0x58: 'Num Enter', 0x62: 'Num 0', 0x63: 'Num .', 0x65: 'Menu key',
+  0xE0: 'L Ctrl', 0xE1: 'L Shift', 0xE2: 'L Alt', 0xE3: 'L Win', 0xE4: 'R Ctrl', 0xE5: 'R Shift', 0xE6: 'R Alt', 0xE7: 'R Win',
+  0xF0: 'Left click', 0xF1: 'Right click', 0xF2: 'Middle click', 0xF3: 'Mouse 4', 0xF4: 'Mouse 5',
+  0xF5: 'Mouse 6', 0xF6: 'Mouse 7', 0xF7: 'Mouse 8', 0xF8: 'Wheel up', 0xF9: 'Wheel down',
+});
+for (let i = 0; i < 12; i++) KEY_NAMES[0x3A + i] = 'F' + (i + 1);
+for (let i = 0; i < 9; i++) KEY_NAMES[0x59 + i] = 'Num ' + (i + 1);
+const srcName = s => KEY_NAMES[s] || ('0x' + s.toString(16).padStart(2, '0'));
+
+const CODE_TO_HID = {};
+for (let i = 0; i < 26; i++) CODE_TO_HID['Key' + String.fromCharCode(65 + i)] = 0x04 + i;
+for (let i = 1; i <= 9; i++) CODE_TO_HID['Digit' + i] = 0x1D + i;
+CODE_TO_HID.Digit0 = 0x27;
+for (let i = 1; i <= 12; i++) CODE_TO_HID['F' + i] = 0x39 + i;
+for (let i = 1; i <= 9; i++) CODE_TO_HID['Numpad' + i] = 0x58 + i;
+Object.assign(CODE_TO_HID, {
+  Enter: 0x28, Escape: 0x29, Backspace: 0x2A, Tab: 0x2B, Space: 0x2C, Minus: 0x2D, Equal: 0x2E, BracketLeft: 0x2F,
+  BracketRight: 0x30, Backslash: 0x31, Semicolon: 0x33, Quote: 0x34, Backquote: 0x35, Comma: 0x36, Period: 0x37,
+  Slash: 0x38, CapsLock: 0x39, PrintScreen: 0x46, ScrollLock: 0x47, Pause: 0x48, Insert: 0x49, Home: 0x4A, PageUp: 0x4B,
+  Delete: 0x4C, End: 0x4D, PageDown: 0x4E, ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
+  NumLock: 0x53, NumpadDivide: 0x54, NumpadMultiply: 0x55, NumpadSubtract: 0x56, NumpadAdd: 0x57, NumpadEnter: 0x58,
+  Numpad0: 0x62, NumpadDecimal: 0x63, ContextMenu: 0x65, ControlLeft: 0xE0, ShiftLeft: 0xE1, AltLeft: 0xE2,
+  MetaLeft: 0xE3, ControlRight: 0xE4, ShiftRight: 0xE5, AltRight: 0xE6, MetaRight: 0xE7,
+});
+const HID_F12 = 0x45;
+
+// ---- defaults ----
+function modelTable(maxdps, exp, dz, n = 6) {
+  const pts = [];
+  for (let k = 0; k < n; k++) { const t = k / (n - 1); pts.push([dz + (1 - dz) * t, maxdps * Math.pow(t, exp)]); }
+  return pts;
+}
+const defaultAim = () => ({ cm: 30, y: 1, pts: [[0.10, 0], [0.28, 72], [0.46, 144], [0.64, 216], [0.82, 288], [1.0, 360]] });
+function factoryDefaults() {   // mirror of firmware/kestrel_input/main/kestrel_config.h (used offline)
+  const K = { W: 0x1A, S: 0x16, A: 0x04, D: 0x07, LALT: 0xE2, SPACE: 0x2C, LCTRL: 0xE0, C: 0x06, R: 0x15, F: 0x09,
+    N1: 0x1E, N2: 0x1F, Q: 0x14, E: 0x08, LSHIFT: 0xE1, V: 0x19, TAB: 0x2B, ESC: 0x29, HOME: 0x4A, UP: 0x52, DOWN: 0x51,
+    LEFT: 0x50, RIGHT: 0x4F, N3: 0x20, N4: 0x21, G: 0x0A, Z: 0x1D };
+  const b = (s, t) => [s, t, 0];
+  return {
+    dpi: 800, smooth: 0, invy: 0, dzshape: 0, window: 8, walk: 50, wheel: 40, adsOn: 0, settle: 0, fast: 0,
+    hip: defaultAim(), ads: defaultAim(),
+    binds: [
+      b(K.W, T.UP), b(K.S, T.DOWN), b(K.A, T.LEFT), b(K.D, T.RIGHT), b(K.LALT, T.WALK),
+      b(0xF0, T.RT), b(0xF1, T.LT), b(0xF2, BTN(PAD.RS)), b(0xF3, BTN(PAD.LB)), b(0xF4, BTN(PAD.RB)),
+      b(0xF8, BTN(PAD.Y)), b(0xF9, BTN(PAD.Y)),
+      b(K.SPACE, BTN(PAD.A)), b(K.LCTRL, BTN(PAD.B)), b(K.C, BTN(PAD.B)), b(K.R, BTN(PAD.X)), b(K.F, BTN(PAD.X)),
+      b(K.N1, BTN(PAD.Y)), b(K.N2, BTN(PAD.Y)), b(K.Q, BTN(PAD.LB)), b(K.E, BTN(PAD.RB)), b(K.LSHIFT, BTN(PAD.LS)),
+      b(K.V, BTN(PAD.RS)), b(K.TAB, BTN(PAD.BACK)), b(K.ESC, BTN(PAD.START)), b(K.HOME, BTN(PAD.GUIDE)),
+      b(K.UP, BTN(PAD.DUP)), b(K.DOWN, BTN(PAD.DDOWN)), b(K.LEFT, BTN(PAD.DLEFT)), b(K.RIGHT, BTN(PAD.DRIGHT)),
+      b(K.N3, BTN(PAD.DLEFT)), b(K.N4, BTN(PAD.DRIGHT)), b(K.G, BTN(PAD.DDOWN)), b(K.Z, BTN(PAD.DUP)),
+    ],
+  };
+}
+
+// ---- encode / decode ----
+const f32 = x => Math.round(x * 10000) / 10000;
+function readAim(v, o) {
+  const n = v.getUint8(o + 8), pts = [];
+  for (let i = 0; i < n && i < MAX_PTS; i++) pts.push([f32(v.getFloat32(o + 12 + 4 * i, true)), f32(v.getFloat32(o + 44 + 4 * i, true))]);
+  return { cm: f32(v.getFloat32(o, true)), y: f32(v.getFloat32(o + 4, true)), pts };
+}
+function writeAim(v, o, a) {
+  const pts = sanitizePts(a.pts);
+  v.setFloat32(o, a.cm, true); v.setFloat32(o + 4, a.y, true); v.setUint8(o + 8, pts.length);
+  pts.forEach(([d, s], i) => { v.setFloat32(o + 12 + 4 * i, d, true); v.setFloat32(o + 44 + 4 * i, s, true); });
+}
+// Firmware needs: 2..8 points, deflection strictly rising in 0..1, speed never falling, last speed > 0.
+function sanitizePts(pts) {
+  let p = pts.filter(([d, s]) => isFinite(d) && isFinite(s)).map(([d, s]) => [Math.min(1, Math.max(0, d)), Math.max(0, s)]);
+  p.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const [d, s] of p) {
+    if (out.length && d <= out[out.length - 1][0] + 1e-4) continue;
+    out.push([d, Math.max(s, out.length ? out[out.length - 1][1] : 0)]);
+  }
+  while (out.length > MAX_PTS) out.splice(Math.floor(out.length / 2), 1);
+  if (out.length < 2 || out[out.length - 1][1] <= 0) return defaultAim().pts;
+  return out;
+}
+function decodeCfg(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (v.getUint32(0, true) !== KCFG_MAGIC) throw new Error('not Kestrel settings');
+  if (v.getUint8(4) === 1 && bytes.length === 138) return upgradeV1(v);
+  if (v.getUint8(4) !== KCFG_VERSION || bytes.length !== KCFG_SIZE) throw new Error('unknown settings version ' + v.getUint8(4));
+  const c = {
+    dpi: f32(v.getFloat32(OFF.dpi, true)), smooth: f32(v.getFloat32(OFF.smooth, true)),
+    invy: v.getUint8(OFF.invy), dzshape: v.getUint8(OFF.dzshape), window: v.getUint8(OFF.window),
+    walk: v.getUint8(OFF.walk), wheel: v.getUint8(OFF.wheel), adsOn: v.getUint8(OFF.adsOn),
+    settle: v.getUint8(OFF.settle), fast: v.getUint8(OFF.fast),
+    hip: readAim(v, OFF.hip), ads: readAim(v, OFF.ads), binds: [],
+  };
+  for (let i = 0; i < MAX_BINDS; i++) {
+    const o = OFF.binds + 3 * i, s = v.getUint8(o), t = v.getUint8(o + 1);
+    if (s && t) c.binds.push([s, t, v.getUint8(o + 2)]);
+  }
+  return c;
+}
+function upgradeV1(v) {
+  const g = o => v.getFloat32(o, true);
+  const c = factoryDefaults();
+  c.dpi = f32(g(6)); c.smooth = f32(g(30)); c.invy = v.getUint8(34); c.dzshape = v.getUint8(35);
+  c.window = v.getUint8(36); c.walk = v.getUint8(37); c.wheel = v.getUint8(38);
+  const aim = { cm: f32(g(10)), y: f32(g(14)), pts: modelTable(g(18), g(22) || 1, g(26)) };
+  c.hip = aim; c.ads = JSON.parse(JSON.stringify(aim)); c.adsOn = 0; c.binds = [];
+  for (let i = 0; i < 48; i++) { const s = v.getUint8(42 + 2 * i), t = v.getUint8(43 + 2 * i); if (s && t) c.binds.push([s, t, 0]); }
+  return c;
+}
+function encodeCfg(c) {
+  const b = new Uint8Array(KCFG_SIZE), v = new DataView(b.buffer);
+  v.setUint32(0, KCFG_MAGIC, true); v.setUint8(4, KCFG_VERSION); v.setUint16(6, KCFG_SIZE, true);
+  v.setFloat32(OFF.dpi, c.dpi, true); v.setFloat32(OFF.smooth, c.smooth, true);
+  v.setUint8(OFF.invy, c.invy ? 1 : 0); v.setUint8(OFF.dzshape, c.dzshape); v.setUint8(OFF.window, c.window);
+  v.setUint8(OFF.walk, c.walk); v.setUint8(OFF.wheel, c.wheel); v.setUint8(OFF.adsOn, c.adsOn ? 1 : 0);
+  v.setUint8(OFF.settle, c.settle || 0); v.setUint8(OFF.fast, c.fast || 0);
+  writeAim(v, OFF.hip, c.hip); writeAim(v, OFF.ads, c.ads);
+  c.binds.slice(0, MAX_BINDS).forEach(([s, t, f], i) => { const o = OFF.binds + 3 * i; v.setUint8(o, s); v.setUint8(o + 1, t); v.setUint8(o + 2, f || 0); });
+  return b;
+}
+const toHex = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+const fromHex = h => new Uint8Array(h.trim().match(/../g).map(x => parseInt(x, 16)));
+const clone = c => decodeCfg(encodeCfg(c));
+
+// =================================================================================
+// State
+// =================================================================================
+let cfg = factoryDefaults();
+let savedHex = null, connected = false, port = null, writer = null, reader = null, fwRight = 0;
+let capture = null, selKey = null, heldNow = new Set(), lastSources = new Set(), siege = null;
+
+function toast(msg, kind = '') { const t = $('toast'); t.textContent = msg; t.className = 'on ' + kind; clearTimeout(toast.h); toast.h = setTimeout(() => t.className = '', 2800); }
+function showMsg(kind, html) { $('msgArea').innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : ''; }
+const isDirty = () => connected && savedHex !== null && toHex(encodeCfg(cfg)) !== savedHex;
+function markDirty() {
+  const d = isDirty();
+  $('bar').classList.toggle('on', d);
+  if (d) $('barWhat').textContent = summarize(decodeCfg(fromHex(savedHex)), cfg).slice(0, 3).join(' · ');
+  $('saveState').className = d ? 'dirty' : '';
+  $('saveState').textContent = !connected ? '' : d ? 'Unsaved changes' : 'Saved on adapter';
+}
+const maxDps = a => a.pts[a.pts.length - 1][1];
+const degPerCount = a => (2.54 / cfg.dpi) / a.cm * 360;
+const capCmS = a => maxDps(a) / 360 * a.cm;
+
+// What differs between two configs, in words (for the save bar and restore dialogs)
+function summarize(a, b) {
+  const out = [], n = x => +(+x).toFixed(2);
+  if (n(a.hip.cm) !== n(b.hip.cm)) out.push(`Hipfire ${n(a.hip.cm)} → ${n(b.hip.cm)} cm`);
+  if (n(a.ads.cm) !== n(b.ads.cm)) out.push(`ADS ${n(a.ads.cm)} → ${n(b.ads.cm)} cm`);
+  if (a.adsOn !== b.adsOn) out.push(`Separate ADS ${a.adsOn ? 'on' : 'off'} → ${b.adsOn ? 'on' : 'off'}`);
+  if (n(a.dpi) !== n(b.dpi)) out.push(`DPI ${n(a.dpi)} → ${n(b.dpi)}`);
+  if ((a.fast || 0) !== (b.fast || 0)) out.push(`Swipe boost ${a.fast || 0} → ${b.fast || 0} %`);
+  if (a.window !== b.window) out.push(`Speed averaging ${a.window} → ${b.window} ms`);
+  if (n(a.smooth) !== n(b.smooth)) out.push(`Smoothing ${n(a.smooth)} → ${n(b.smooth)}`);
+  if (n(a.hip.y) !== n(b.hip.y) || n(a.ads.y) !== n(b.ads.y)) out.push('Vertical speed');
+  if (JSON.stringify(a.hip.pts) !== JSON.stringify(b.hip.pts)) out.push('Hipfire curve');
+  if (JSON.stringify(a.ads.pts) !== JSON.stringify(b.ads.pts)) out.push('ADS curve');
+  if (a.walk !== b.walk || a.wheel !== b.wheel || a.invy !== b.invy || (a.settle || 0) !== (b.settle || 0) || a.dzshape !== b.dzshape) out.push('Other settings');
+  const ka = JSON.stringify([...a.binds].sort()), kb = JSON.stringify([...b.binds].sort());
+  if (ka !== kb) out.push(a.binds.length === b.binds.length ? 'Keybinds changed' : `Keybinds ${a.binds.length} → ${b.binds.length}`);
+  return out;
+}
+
+// Confirm dialog
+function ask(title, html, yes = 'OK') {
+  return new Promise(res => {
+    $('dlgTitle').textContent = title; $('dlgBody').innerHTML = html; $('dlgYes').textContent = yes;
+    const d = $('dlg');
+    $('dlgYes').onclick = () => { d.close(); res(true); };
+    $('dlgNo').onclick = () => { d.close(); res(false); };
+    d.oncancel = () => res(false);
+    d.showModal();
+  });
+}
+
+// =================================================================================
+// Aim page
+// =================================================================================
+const FIELDS = [   // [getter, setter, numberId, rangeId, int]
+  [() => cfg.dpi, v => cfg.dpi = v, 'dpi'],
+  [() => cfg.hip.cm, v => cfg.hip.cm = v, 'hipcm', 'hipcmr'],
+  [() => cfg.hip.y, v => cfg.hip.y = v, 'hipy'],
+  [() => cfg.ads.cm, v => cfg.ads.cm = v, 'adscm', 'adscmr'],
+  [() => cfg.ads.y, v => cfg.ads.y = v, 'adsy'],
+  [() => cfg.smooth, v => cfg.smooth = v, 'smooth'],
+  [() => cfg.window, v => cfg.window = v, 'window', null, true],
+  [() => cfg.walk, v => cfg.walk = v, 'walk', null, true],
+  [() => cfg.wheel, v => cfg.wheel = v, 'wheel', null, true],
+  [() => cfg.fast || 0, v => cfg.fast = v, 'fast', 'fastr', true],
+  [() => (cfg.settle || 0) * 10, v => cfg.settle = Math.round(v / 10), 'settle', null, true],
+];
+function clampInput(id, val) { const el = $(id), min = parseFloat(el.min), max = parseFloat(el.max); return Math.min(max, Math.max(min, val)); }
+const fmt = (x, d = 1) => (+x).toFixed(d);
+function renderAimFacts() {
+  for (const k of ['hip', 'ads']) {
+    const a = cfg[k];
+    $(k + 'Big').innerHTML = `${fmt(a.cm)}<small>cm / 360°</small>`;
+    $(k + 'Deg').textContent = degPerCount(a).toFixed(4);
+    $(k + 'Top').textContent = Math.round(maxDps(a)) + ' °/s';
+    $(k + 'Cap').textContent = capCmS(a).toFixed(0) + ' cm/s';
+  }
+}
+function renderFields() {
+  for (const [get, , num, rng] of FIELDS) { if (document.activeElement !== $(num)) $(num).value = +(+get()).toFixed(4); if (rng) $(rng).value = get(); }
+  $('invy').checked = !!cfg.invy; $('adson').checked = !!cfg.adsOn;
+  $('adsBox').classList.toggle('off', !cfg.adsOn); $('adsOffNote').style.display = cfg.adsOn ? 'none' : '';
+  $('dzshape').value = String(cfg.dzshape);
+  $('rDz').style.width = $('rDz').style.height = Math.max(4, 160 * cfg.hip.pts[0][0]) + 'px';
+  renderAimFacts();
+}
+for (const [get, set, num, rng, isInt] of FIELDS) {
+  $(num).addEventListener('change', () => {
+    let v = parseFloat($(num).value); if (isNaN(v)) v = get();
+    v = clampInput(num, v); if (isInt) v = Math.round(v);
+    set(v); renderFields(); renderCurves(); markDirty();
+  });
+  if (rng) $(rng).addEventListener('input', () => { set(parseFloat($(rng).value)); $(num).value = get(); renderAimFacts(); markDirty(); });
+}
+for (const b of document.querySelectorAll('[data-step]')) b.onclick = () => {
+  const a = cfg[b.dataset.step]; a.cm = Math.round(a.cm * +b.dataset.k * 10) / 10; renderFields(); renderCurves(); markDirty();
+};
+$('invy').onchange = () => { cfg.invy = $('invy').checked ? 1 : 0; markDirty(); };
+$('adson').onchange = () => { cfg.adsOn = $('adson').checked ? 1 : 0; renderFields(); renderCurves(); markDirty(); };
+$('dzshape').onchange = () => { cfg.dzshape = parseInt($('dzshape').value); markDirty(); };
+
+// =================================================================================
+// Keys page
+// =================================================================================
+const K = (code, w = 1) => ({ code, w });
+const VOID = w => ({ code: null, w });
+const KB_MAIN = [
+  [K(0x29), VOID(1), K(0x3A), K(0x3B), K(0x3C), K(0x3D), VOID(.5), K(0x3E), K(0x3F), K(0x40), K(0x41), VOID(.5), K(0x42), K(0x43), K(0x44), K(0x45)],
+  [K(0x35), K(0x1E), K(0x1F), K(0x20), K(0x21), K(0x22), K(0x23), K(0x24), K(0x25), K(0x26), K(0x27), K(0x2D), K(0x2E), K(0x2A, 2)],
+  [K(0x2B, 1.5), K(0x14), K(0x1A), K(0x08), K(0x15), K(0x17), K(0x1C), K(0x18), K(0x0C), K(0x12), K(0x13), K(0x2F), K(0x30), K(0x31, 1.5)],
+  [K(0x39, 1.75), K(0x04), K(0x16), K(0x07), K(0x09), K(0x0A), K(0x0B), K(0x0D), K(0x0E), K(0x0F), K(0x33), K(0x34), K(0x28, 2.25)],
+  [K(0xE1, 2.25), K(0x1D), K(0x1B), K(0x06), K(0x19), K(0x05), K(0x11), K(0x10), K(0x36), K(0x37), K(0x38), K(0xE5, 2.75)],
+  [K(0xE0, 1.25), K(0xE3, 1.25), K(0xE2, 1.25), K(0x2C, 6.25), K(0xE6, 1.25), K(0xE7, 1.25), K(0x65, 1.25), K(0xE4, 1.25)],
+];
+const KB_NAV = [[K(0x46), K(0x47), K(0x48)], [K(0x49), K(0x4A), K(0x4B)], [K(0x4C), K(0x4D), K(0x4E)], [VOID(3)], [VOID(1), K(0x52), VOID(1)], [K(0x50), K(0x51), K(0x4F)]];
+const KB_NUM = [[VOID(4)], [K(0x53), K(0x54), K(0x55), K(0x56)], [K(0x5F), K(0x60), K(0x61), K(0x57)], [K(0x5C), K(0x5D), K(0x5E), VOID(1)], [K(0x59), K(0x5A), K(0x5B), K(0x58)], [K(0x62, 2), K(0x63), VOID(1)]];
+const SHORT = { 0xE0: 'Ctrl', 0xE1: 'Shift', 0xE2: 'Alt', 0xE3: 'Win', 0xE4: 'Ctrl', 0xE5: 'Shift', 0xE6: 'Alt', 0xE7: 'Win',
+  0x2A: 'Bksp', 0x39: 'Caps', 0x65: 'Menu', 0x53: 'Num', 0x54: '/', 0x55: '*', 0x56: '-', 0x57: '+', 0x58: 'Ent', 0x62: '0', 0x63: '.',
+  0x46: 'PrtSc', 0x47: 'ScrLk', 0x48: 'Pause', 0x49: 'Ins', 0x4C: 'Del', 0x4B: 'PgUp', 0x4E: 'PgDn' };
+for (let i = 0; i < 9; i++) SHORT[0x59 + i] = String(i + 1);
+const keyLabel = c => SHORT[c] || srcName(c);
+const MOUSE_SRC = [0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9];
+const UNIT = 35, KGAP = 4;
+
+const bindsOf = src => cfg.binds.filter(b => b[0] === src);
+function keyEl(code, w) {
+  const el = document.createElement('div');
+  el.style.width = (UNIT * w + KGAP * (Math.ceil(w) - 1)) + 'px';
+  if (code === null) { el.className = 'key void'; return el; }
+  el.className = 'key'; el.dataset.code = code; el.onclick = () => selectKey(code);
+  return el;
+}
+function buildKeyboard() {
+  const kb = $('kb'); kb.innerHTML = '';
+  for (const layout of [KB_MAIN, KB_NAV, KB_NUM]) {
+    const blk = document.createElement('div'); blk.className = 'blk';
+    for (const row of layout) { const r = document.createElement('div'); r.className = 'r'; for (const k of row) r.appendChild(keyEl(k.code, k.w)); blk.appendChild(r); }
+    kb.appendChild(blk);
+  }
+  const m = $('mice'); m.innerHTML = ''; for (const s of MOUSE_SRC) { const el = keyEl(s, 2); el.style.width = ''; m.appendChild(el); }
+}
+function paintKeys() {
+  for (const el of document.querySelectorAll('.key[data-code]')) {
+    const code = +el.dataset.code, bs = bindsOf(code);
+    const tags = bs.map(b => [tgtShort(b[1]), ...flagTags(b[2])].join('·'));
+    el.innerHTML = `<div class="lb">${esc(keyLabel(code))}</div>` + (tags.length ? `<div class="tg" title="${esc(tags.join('  '))}">${esc(tags.join(' '))}</div>` : '');
+    el.classList.toggle('bound', bs.length > 0);
+    el.classList.toggle('sel', code === selKey);
+    el.classList.toggle('held', heldNow.has(code));
+  }
+  $('slots').textContent = `${cfg.binds.length}/${MAX_BINDS} binds`;
+}
+function selectKey(code) { selKey = code; paintKeys(); renderKeyPanel(); }
+let pickFilter = '';
+function renderKeyPanel() {
+  const p = $('keyPanel');
+  if (selKey === null) { p.innerHTML = '<h2>Key</h2><p class="dim" style="margin:0">Select a key on the left, or press one on the adapter\'s keyboard or mouse.</p>'; return; }
+  const mine = cfg.binds.map((b, i) => [b, i]).filter(([b]) => b[0] === selKey);
+  let h = `<h2>Key</h2><div class="row between"><div class="keyname">${esc(srcName(selKey))}</div>${mine.length ? '<button class="quiet sm" id="kpClear">Clear</button>' : ''}</div>`;
+  if (!mine.length) h += '<p class="dim" style="margin:0 0 4px">Does nothing yet. Pick an action below.</p>';
+  mine.forEach(([b], i) => {
+    h += `<div class="bindrow"><div class="head"><b>${esc(tgtName(b[1]))}</b><button class="quiet sm" data-del="${i}" title="Remove">Remove</button></div><div class="flags">` +
+      FLAGS.map(F => `<button class="flag${b[2] & F.f ? ' on' : ''}" data-i="${i}" data-f="${F.f}" title="${esc(F.tip)}">${F.name}</button>`).join('') + '</div></div>';
+  });
+  h += `<div class="picker"><input type="text" id="pickQ" placeholder="Add an action… (type to filter)" value="${esc(pickFilter)}">`;
+  const q = pickFilter.trim().toLowerCase();
+  for (const g of ACTIONS) {
+    const items = g.items.filter(a => !q || (a.name + ' ' + a.s + ' ' + g.group).toLowerCase().includes(q));
+    if (!items.length) continue;
+    h += `<div class="pgroup">${g.group}</div><div class="pgrid">` +
+      items.map(a => `<button data-t="${a.tgt}" class="${mine.some(([b]) => b[1] === a.tgt) ? 'on' : ''}">${esc(a.name)}</button>`).join('') + '</div>';
+  }
+  p.innerHTML = h + '</div>';
+  p.querySelectorAll('[data-del]').forEach(el => el.onclick = () => { cfg.binds.splice(mine[+el.dataset.del][1], 1); bindsChanged(); });
+  p.querySelectorAll('.flag').forEach(el => el.onclick = () => {
+    const b = mine[+el.dataset.i][0], f = +el.dataset.f, F = FLAGS.find(x => x.f === f);
+    b[2] = (b[2] & f) ? (b[2] & ~f) : ((b[2] | f) & ~(F.clears || 0));
+    bindsChanged();
+  });
+  p.querySelectorAll('.pgrid button').forEach(el => el.onclick = () => {
+    const t = +el.dataset.t, i = cfg.binds.findIndex(b => b[0] === selKey && b[1] === t);
+    if (i >= 0) cfg.binds.splice(i, 1);
+    else { if (cfg.binds.length >= MAX_BINDS) { toast(`All ${MAX_BINDS} slots are used`, 'bad'); return; } cfg.binds.push([selKey, t, 0]); }
+    bindsChanged();
+  });
+  const pq = $('pickQ'); pq.oninput = () => { pickFilter = pq.value; const pos = pq.selectionStart; renderKeyPanel(); const n = $('pickQ'); n.focus(); n.setSelectionRange(pos, pos); };
+  const clr = $('kpClear'); if (clr) clr.onclick = () => { cfg.binds = cfg.binds.filter(b => b[0] !== selKey); bindsChanged(); };
+}
+function bindsChanged() { paintKeys(); renderKeyPanel(); renderList(); markDirty(); }
+
+function renderList() {
+  const box = $('alist'); box.innerHTML = '';
+  for (const g of ACTIONS) {
+    const wrap = document.createElement('div'); wrap.className = 'agroup'; wrap.innerHTML = `<h2>${esc(g.group)}</h2>`;
+    for (const a of g.items) {
+      const row = document.createElement('div'); row.className = 'arow' + (capture === a.tgt ? ' capturing' : '');
+      row.innerHTML = `<div class="an">${esc(a.name)}</div><div class="chips"></div>`;
+      const chips = row.querySelector('.chips');
+      cfg.binds.forEach((b, idx) => {
+        if (b[1] !== a.tgt) return;
+        const c = document.createElement('span'); c.className = 'chip';
+        const tags = flagTags(b[2]);
+        c.innerHTML = `${esc(srcName(b[0]))}${tags.length ? ` <i>${tags.join('·')}</i>` : ''}<button title="Remove">×</button>`;
+        c.querySelector('button').onclick = () => { cfg.binds.splice(idx, 1); bindsChanged(); };
+        chips.appendChild(c);
+      });
+      if (capture === a.tgt) {
+        const m = document.createElement('span'); m.className = 'capmsg'; m.textContent = 'Press a key or mouse button…'; chips.appendChild(m);
+        const sel = document.createElement('select');
+        sel.innerHTML = '<option value="">or pick</option>' + Object.keys(KEY_NAMES).map(Number).sort((x, y) => x - y).map(k => `<option value="${k}">${esc(srcName(k))}</option>`).join('');
+        sel.onchange = () => { if (sel.value) addBind(+sel.value, a.tgt); }; chips.appendChild(sel);
+        const x = document.createElement('button'); x.className = 'quiet sm'; x.textContent = 'Cancel'; x.onclick = () => { capture = null; renderList(); }; chips.appendChild(x);
+      } else {
+        const add = document.createElement('button'); add.className = 'quiet sm'; add.textContent = '+ Add'; add.onclick = () => { capture = a.tgt; renderList(); }; chips.appendChild(add);
+      }
+      wrap.appendChild(row);
+    }
+    box.appendChild(wrap);
+  }
+}
+function addBind(src, tgt) {
+  if (!cfg.binds.some(b => b[0] === src && b[1] === tgt)) {
+    if (cfg.binds.length >= MAX_BINDS) { toast(`All ${MAX_BINDS} slots are used. Remove one first.`, 'bad'); return; }
+    cfg.binds.push([src, tgt, 0]); toast(`${srcName(src)} → ${tgtName(tgt)}`, 'ok');
+  }
+  capture = null; bindsChanged();
+}
+function setView(kb) { $('vKb').classList.toggle('on', kb); $('vList').classList.toggle('on', !kb); $('kbView').style.display = kb ? '' : 'none'; $('listView').style.display = kb ? 'none' : ''; if (!kb) renderList(); }
+$('vKb').onclick = () => setView(true); $('vList').onclick = () => setView(false);
+
+// =================================================================================
+// Live
+// =================================================================================
+const LIVE_BTNS = [['A', PAD.A], ['B', PAD.B], ['X', PAD.X], ['Y', PAD.Y], ['LB', PAD.LB], ['RB', PAD.RB], ['L3', PAD.LS], ['R3', PAD.RS],
+  ['VIEW', PAD.BACK], ['MENU', PAD.START], ['↑', PAD.DUP], ['↓', PAD.DDOWN], ['←', PAD.DLEFT], ['→', PAD.DRIGHT], ['XBOX', PAD.GUIDE]];
+$('pbtns').innerHTML = LIVE_BTNS.map(([n, b]) => `<span data-bit="${b}">${n}</span>`).join('');
+function knob(id, x, y) { $(id).style.left = (80 + (x / 32767) * 72) + 'px'; $(id).style.top = (80 - (y / 32767) * 72) + 'px'; }
+let lastPadAt = 0, lastPokeAt = 0, silent = false;
+function onPad(parts) {
+  lastPadAt = Date.now();
+  if (silent) { silent = false; setConn('on', 'Connected'); }
+  if (!pageOn('live')) return;
+  const [buttons, lt, rt, lx, ly, rx, ry] = parts.map(Number);
+  knob('lK', lx, ly); knob('rK', rx, ry);
+  $('ltF').style.height = (lt / 2.55) + '%'; $('rtF').style.height = (rt / 2.55) + '%';
+  for (const el of $('pbtns').children) el.classList.toggle('on', !!(buttons & (1 << el.dataset.bit)));
+}
+function onKeys(mbHex, listHex) {
+  const mb = parseInt(mbHex, 16), now = new Set();
+  for (let i = 0; i < 8; i++) if (mb & (1 << i)) now.add(0xF0 + i);
+  if (listHex) for (const h of listHex.split(',')) if (h) now.add(parseInt(h, 16));
+  $('heldNow').textContent = now.size ? [...now].map(srcName).join(' + ') : '–';
+  const fresh = [...now].filter(s => !lastSources.has(s));
+  heldNow = now; lastSources = now;
+  if (fresh.includes(HID_F12) && pageOn('cal')) { calHotkey(); return; }
+  if (fresh.length && pageOn('keys')) {
+    if (capture !== null) { addBind(fresh[0], capture); return; }
+    if ($('kbView').style.display !== 'none') { selectKey(fresh[0]); return; }
+  }
+  if (pageOn('keys')) paintKeys();
+}
+
+// =================================================================================
+// Serial
+// =================================================================================
+let pending = null;
+function expect(kind, ms = 3000) {
+  return new Promise((resolve, reject) => {
+    if (pending) pending.reject(new Error('superseded'));
+    pending = { kind, resolve, reject, timer: setTimeout(() => { pending = null; reject(new Error('the adapter did not answer')); }, ms) };
+  });
+}
+function settle(kind, value) { if (pending && pending.kind === kind) { clearTimeout(pending.timer); const p = pending; pending = null; p.resolve(value); } }
+async function send(line) { if (!writer) throw new Error('not connected'); await writer.write(new TextEncoder().encode(line + '\n')); }
+const logLines = [];
+function addLog(line) { logLines.push(line); if (logLines.length > 800) logLines.shift(); if (pageOn('log')) renderLog(); }
+function renderLog() {
+  const el = $('log'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20, q = $('logFilter').value.toLowerCase();
+  el.textContent = (q ? logLines.filter(l => l.toLowerCase().includes(q)) : logLines).join('\n');
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+$('logFilter').oninput = renderLog;
+$('logCopy').onclick = () => navigator.clipboard.writeText(logLines.join('\n')).then(() => toast('Log copied', 'ok'));
+$('logClear').onclick = () => { logLines.length = 0; renderLog(); };
+
+function onLine(line) {
+  const i = line.indexOf('@KST ');
+  if (i < 0) { if (line.trim()) addLog(line); return; }
+  if (i > 0) addLog(line.slice(0, i));
+  const parts = line.slice(i + 5).trim().split(/\s+/), kind = parts.shift();
+  switch (kind) {
+    case 'PAD': onPad(parts); break;
+    case 'KEYS': onKeys(parts[0], parts[1]); break;
+    case 'PONG': $('fw').textContent = `L v${parts[0]} · R v${parts[1]} · ${parts[2] === 'xbox_one' ? 'Xbox One' : 'Xbox 360'}`; settle('PONG', parts); break;
+    case 'CFG': settle('CFG', parts[0]); break;
+    case 'RESULT': settle('RESULT', parseInt(parts[0])); break;
+    case 'ERR': addLog('ERROR: ' + parts.join(' ')); if (pending) { const p = pending; pending = null; clearTimeout(p.timer); p.reject(new Error(parts.join(' '))); } break;
+  }
+}
+async function readLoop() {
+  const dec = new TextDecoder(); let buf = '';
+  while (port && port.readable) {
+    reader = port.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let n; while ((n = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, n).replace(/\r$/, ''); buf = buf.slice(n + 1); try { onLine(line); } catch (e) { console.error(e); } }
+      }
+    } catch (e) { break; } finally { reader.releaseLock(); }
+  }
+  if (connected) dropped('Adapter unplugged');
+}
+function adopt(c) { cfg = c; renderAll(); markDirty(); }
+async function getCfgHex() { const p = expect('CFG'); await send('KST GET'); return await p; }
+async function loadFromAdapter() { const hex = await getCfgHex(); const c = decodeCfg(fromHex(hex)); savedHex = toHex(encodeCfg(c)); adopt(c); }
+
+// Opens a port: from the picker (user click) or one this browser already has permission for (auto).
+async function openPort(p, auto) {
+  try { await p.open({ baudRate: 921600, bufferSize: 65536 }); }
+  catch (e) {
+    if (!auto) showMsg('bad', `Couldn't open the port: ${esc(e.message)}. Something else is using it, like a script or another Kestrel tab. Close it and try again.`);
+    else setConn('', 'Port busy, close other programs using COM3');
+    return false;
+  }
+  port = p; writer = port.writable.getWriter(); connected = true; readLoop();
+  setConn('on', 'Connected'); $('btnConnect').textContent = 'Disconnect'; $('btnConnect').classList.remove('go');
+  try {
+    const pong = expect('PONG'); await send('KST PING'); const fw = await pong;
+    fwRight = +fw[1];
+    if (+fw[1] < 4 || +fw[0] < 5) throw new Error(`the adapter's firmware is v${fw[0]}/${fw[1]}; this app needs v5/4 or newer`);
+    lastPadAt = Date.now();
+    await send('KST LIVE 1'); await loadFromAdapter(); showMsg('');
+    toast(auto ? 'Reconnected. Settings read from the adapter.' : 'Connected. Settings read from the adapter.', 'ok');
+  } catch (e) { showMsg('warn', `Connected to the port, but ${esc(e.message)}.`); }
+  return true;
+}
+async function connect() {
+  if (!('serial' in navigator)) return;
+  let p; try { p = await navigator.serial.requestPort(); } catch (e) { return; }
+  await openPort(p, false);
+}
+async function autoConnect() {
+  if (!('serial' in navigator) || connected) return;
+  const ports = await navigator.serial.getPorts();
+  const ch343 = ports.find(p => (p.getInfo().usbVendorId || 0) === 0x1A86) || (ports.length === 1 ? ports[0] : null);
+  if (ch343) await openPort(ch343, true);
+}
+async function disconnect() {
+  try { await send('KST CAL -1'); await send('KST LIVE 0'); } catch (e) {}
+  connected = false;
+  try { if (reader) await reader.cancel(); } catch (e) {}
+  try { if (writer) writer.releaseLock(); } catch (e) {}
+  try { if (port) await port.close(); } catch (e) {}
+  port = writer = reader = null; dropped('Not connected (port free for scripts)');
+}
+function dropped(text) {
+  connected = false; savedHex = null; setConn('', text);
+  $('btnConnect').textContent = 'Connect'; $('btnConnect').classList.add('go'); $('fw').textContent = '';
+  stopCal(); markDirty();
+}
+function setConn(kind, text) { $('led').className = 'led ' + kind; $('connText').textContent = text; }
+$('btnConnect').onclick = () => connected ? disconnect() : connect();
+
+// Save with read-back: the adapter very occasionally drops a SET, so check and retry.
+async function save() {
+  if (!connected) { toast('Connect the adapter first', 'bad'); return; }
+  const hex = toHex(encodeCfg(cfg));
+  $('btnSave').disabled = true;
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const p = expect('RESULT', 4000); await send('KST SET ' + hex); const r = await p;
+      if (r === 1) { toast('The adapter rejected a value. Check the numbers.', 'bad'); return; }
+      if (r === 2) { toast('Applied, but writing to flash failed', 'bad'); return; }
+      const back = await getCfgHex();
+      if (back === hex) { savedHex = hex; adopt(decodeCfg(fromHex(hex))); toast(attempt > 1 ? 'Saved and verified (needed a retry)' : 'Saved and verified', 'ok'); return; }
+    }
+    toast('Save did not stick after 3 tries. Try again.', 'bad');
+  } catch (e) { toast('Save failed: ' + e.message, 'bad'); }
+  finally { $('btnSave').disabled = false; }
+}
+$('btnSave').onclick = save;
+$('btnRevert').onclick = () => { if (savedHex) { adopt(decodeCfg(fromHex(savedHex))); toast('Reverted to what is on the adapter'); } };
+$('btnDefaults').onclick = async () => {
+  if (!connected) { adopt(factoryDefaults()); toast('Defaults loaded (not connected)'); return; }
+  if (!await ask('Reset to factory defaults?', '<p class="dim">Every setting, curve and key on the adapter goes back to how Kestrel shipped. Download a backup first if you might want this setup back.</p>', 'Reset')) return;
+  try { const p = expect('RESULT'); await send('KST DEFAULTS'); if (await p === 0) { await loadFromAdapter(); toast('Adapter reset to defaults', 'ok'); } else toast('Reset failed', 'bad'); }
+  catch (e) { toast('Reset failed: ' + e.message, 'bad'); }
+};
+
+// =================================================================================
+// Calibration
+// =================================================================================
+// Slow rows first: they decide how precise small aim feels, and they're easy to time.
+const FRACS = [0.02, 0.06, 0.15, 0.3, 0.6, 1.0], TURNS = [1, 1, 1, 2, 3, 4];
+let calSetup = 'hip';
+const cal = { hip: freshCal(), ads: freshCal() };
+function freshCal() { return { dz: null, rows: FRACS.map((f, i) => ({ frac: f, turns: TURNS[i], secs: null, dps: null })) }; }
+let timer = null, t0 = 0, activeRow = null, dzTimer = null, dzVal = 0, scopeT0 = 0;
+async function stick(milli) { await send('KST CAL ' + Math.round(milli)); }
+function needConn() { if (!connected) { toast('Connect the adapter first', 'bad'); return false; } return true; }
+function stopCal() {
+  clearInterval(timer); clearInterval(dzTimer); timer = dzTimer = null; activeRow = null;
+  if (connected) send('KST CAL -1').catch(() => {});
+  $('dzStart').disabled = false; $('dzMoved').disabled = true; $('scopeStart').disabled = false; $('scopeStop').disabled = true;
+  renderCal();
+}
+const rowDefl = (c, r) => (c.dz ?? 0) + (1 - (c.dz ?? 0)) * r.frac;
+function nextRow(c) { return c.rows.findIndex(r => r.dps === null); }
+function renderCal() {
+  $('cHip').classList.toggle('on', calSetup === 'hip'); $('cAds').classList.toggle('on', calSetup === 'ads');
+  const c = cal[calSetup];
+  $('dzRes').textContent = c.dz === null ? '' : `starts at ${c.dz.toFixed(3)}`;
+  let h = `<tr><th>Stick</th><th class="n">Turns</th><th></th><th class="n">Time</th><th class="n">Speed</th></tr>`;
+  c.rows.forEach((r, i) => {
+    const busy = activeRow === i;
+    h += `<tr class="${busy ? 'busy' : ''}"><td class="mono">${rowDefl(c, r).toFixed(3)} <span class="faint">(${Math.round(r.frac * 100)}%)</span></td>
+      <td class="n"><input type="number" min="1" max="20" value="${r.turns}" data-i="${i}" class="calTurns" style="width:52px"></td>
+      <td><button class="sm ${busy ? '' : 'go'}" data-i="${i}" data-a="${busy ? 'stop' : 'start'}" ${c.dz === null || (activeRow !== null && !busy) ? 'disabled' : ''}>${busy ? 'Stop' : 'Start'}</button>
+        ${busy ? `<button class="sm quiet" data-i="${i}" data-a="none">Didn't move</button>` : ''}</td>
+      <td class="n" id="calT${i}">${r.secs === null ? '–' : r.secs.toFixed(2) + ' s'}</td>
+      <td class="n">${r.dps === null ? '–' : Math.round(r.dps) + ' °/s'}</td></tr>`;
+  });
+  $('calTable').innerHTML = h;
+  $('calTable').querySelectorAll('.calTurns').forEach(el => el.onchange = () => { c.rows[+el.dataset.i].turns = Math.max(1, +el.value || 1); });
+  $('calTable').querySelectorAll('button').forEach(el => el.onclick = () => calRow(+el.dataset.i, el.dataset.a));
+  const done = c.dz !== null && c.rows.some(r => r.dps !== null && r.dps > 0);
+  $('calUse').disabled = !done;
+  $('calNote').textContent = c.dz === null ? 'Do step 1 first.' : (done ? 'Rows you skip keep their current values.' : 'Measure at least one row.');
+  $('calStatus').textContent = `current top speed ${Math.round(maxDps(cfg[calSetup]))} °/s`;
+}
+async function calRow(i, action) {
+  const c = cal[calSetup], r = c.rows[i];
+  if (action === 'start') {
+    if (!needConn()) return;
+    activeRow = i; await stick(rowDefl(c, r) * 1000); t0 = performance.now(); renderCal();
+    timer = setInterval(() => { const el = $('calT' + i); if (el) el.textContent = ((performance.now() - t0) / 1000).toFixed(2) + ' s'; }, 40);
+  } else {
+    const secs = (performance.now() - t0) / 1000; clearInterval(timer); timer = null; activeRow = null; await stick(-1);
+    if (action === 'none') { r.secs = null; r.dps = 0; } else { r.secs = secs; r.dps = 360 * r.turns / secs; }
+    renderCal();
+  }
+}
+// F12 on the adapter keyboard = "the next button", so the test can be run from the game screen
+function calHotkey() {
+  const c = cal[calSetup];
+  if (dzTimer) { $('dzMoved').click(); return; }
+  if (activeRow !== null) { calRow(activeRow, 'stop'); return; }
+  if (c.dz === null) { $('dzStart').click(); return; }
+  const i = nextRow(c); if (i >= 0) calRow(i, 'start');
+}
+$('cHip').onclick = () => { if (activeRow === null && !dzTimer) { calSetup = 'hip'; renderCal(); } };
+$('cAds').onclick = () => { if (activeRow === null && !dzTimer) { calSetup = 'ads'; renderCal(); } };
+$('dzStart').onclick = async () => {
+  if (!needConn()) return;
+  stopCal(); dzVal = 0.05; $('dzStart').disabled = true; $('dzMoved').disabled = false; await stick(dzVal * 1000);
+  dzTimer = setInterval(async () => {   // slow, fine steps: the real starting point is around 0.09
+    dzVal += 0.002; $('dzNow').textContent = dzVal.toFixed(3);
+    if (dzVal > 0.45) { stopCal(); toast('Reached 0.45. Is the game running and focused?', 'bad'); return; }
+    try { await stick(dzVal * 1000); } catch (e) { stopCal(); }
+  }, 250);
+};
+$('dzMoved').onclick = () => { cal[calSetup].dz = Math.max(0, dzVal - 0.002); stopCal(); };
+$('calUse').onclick = () => {
+  const c = cal[calSetup], pts = [[c.dz, 0]];
+  for (const r of c.rows) { if (r.dps === null) continue; const d = rowDefl(c, r); if (r.dps === 0) { pts[0] = [d, 0]; continue; } pts.push([d, r.dps]); }
+  const top = Math.max(...pts.map(p => p[0]));
+  for (const p of cfg[calSetup].pts) if (p[0] > top + 0.01) pts.push(p);   // keep current points above what was measured
+  cfg[calSetup].pts = sanitizePts(pts);
+  if (calSetup === 'ads') cfg.adsOn = 1;
+  renderAll(); markDirty();
+  toast(`${calSetup === 'hip' ? 'Hipfire' : 'ADS'} curve updated. Save to keep it.`, 'ok');
+};
+
+// =================================================================================
+// Curves
+// =================================================================================
+function chartSvg(a) {
+  const W = 520, H = 200, P = 26, mx = Math.max(10, maxDps(a)) * 1.08;
+  const x = d => P + d * (W - P - 8), y = s => H - P - s / mx * (H - P - 10);
+  let g = '';
+  for (let d = 0; d <= 1.0001; d += 0.25) g += `<line x1="${x(d)}" y1="10" x2="${x(d)}" y2="${H - P}" stroke="#2c2b28"/><text x="${x(d)}" y="${H - 9}" fill="#6f6d66" font-size="10" text-anchor="middle" font-family="Consolas">${d.toFixed(2)}</text>`;
+  const step = mx > 1200 ? 500 : mx > 500 ? 200 : 100;
+  for (let s = 0; s <= mx; s += step) g += `<line x1="${P}" y1="${y(s)}" x2="${W - 8}" y2="${y(s)}" stroke="#2c2b28"/><text x="${P - 4}" y="${y(s) + 3}" fill="#6f6d66" font-size="10" text-anchor="end" font-family="Consolas">${s}</text>`;
+  const pl = a.pts.map(([d, s]) => `${x(d).toFixed(1)},${y(s).toFixed(1)}`).join(' ');
+  const dots = a.pts.map(([d, s]) => `<rect x="${x(d) - 2.5}" y="${y(s) - 2.5}" width="5" height="5" fill="#e3842b"/>`).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}<polyline points="${pl}" fill="none" stroke="#e3842b" stroke-width="1.5"/>${dots}</svg>`;
+}
+function renderCurves() {
+  const box = $('curveBoxes'); box.innerHTML = '';
+  for (const [key, title] of [['hip', 'Hipfire'], ['ads', 'ADS']]) {
+    const a = cfg[key], el = document.createElement('div'); el.className = 'box';
+    el.innerHTML = `<h2>${title}${key === 'ads' && !cfg.adsOn ? ' (off, uses hipfire)' : ''}</h2>${chartSvg(a)}
+      <p class="note">Stick position (across) vs turn speed in °/s (up). Faster mouse moves than <b>${capCmS(a).toFixed(0)} cm/s</b> hit the top.</p>
+      <table class="ptab"><tr><th class="n">Stick</th><th class="n">°/s</th><th></th></tr>
+      ${a.pts.map(([d, s], i) => `<tr><td class="n"><input type="number" step="0.001" min="0" max="1" value="${d}" data-i="${i}" data-c="0"></td><td class="n"><input type="number" step="1" min="0" max="5000" value="${Math.round(s * 10) / 10}" data-i="${i}" data-c="1"></td><td><button class="quiet sm" data-rm="${i}" ${a.pts.length <= 2 ? 'disabled' : ''}>×</button></td></tr>`).join('')}
+      </table>
+      <div class="row" style="margin-top:8px"><button class="sm" data-add>+ point</button></div>
+      <details style="margin-top:12px"><summary class="dim" style="cursor:pointer">Generate from a simple model</summary>
+        <div class="row" style="margin-top:8px"><label>max °/s <input type="number" class="gMax" value="${Math.round(maxDps(a))}" min="10" max="5000"></label>
+        <label>curve <input type="number" class="gExp" value="1" min="0.2" max="5" step="0.05" style="width:64px"></label>
+        <label>start <input type="number" class="gDz" value="${a.pts[0][0].toFixed(3)}" min="0" max="0.6" step="0.005" style="width:72px"></label>
+        <button class="sm gGen">Generate</button></div></details>`;
+    el.querySelectorAll('.ptab input').forEach(inp => inp.onchange = () => {
+      const i = +inp.dataset.i, c = +inp.dataset.c, v = parseFloat(inp.value); if (!isFinite(v)) return;
+      a.pts[i][c] = v; a.pts = sanitizePts(a.pts); renderAll(); markDirty();
+    });
+    el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { a.pts.splice(+b.dataset.rm, 1); a.pts = sanitizePts(a.pts); renderAll(); markDirty(); });
+    el.querySelector('[data-add]').onclick = () => {
+      if (a.pts.length >= MAX_PTS) { toast(`At most ${MAX_PTS} points`, 'bad'); return; }
+      let gi = 0, gw = 0; for (let i = 1; i < a.pts.length; i++) if (a.pts[i][0] - a.pts[i - 1][0] > gw) { gw = a.pts[i][0] - a.pts[i - 1][0]; gi = i; }
+      const p0 = a.pts[gi - 1], p1 = a.pts[gi]; a.pts.splice(gi, 0, [f32((p0[0] + p1[0]) / 2), f32((p0[1] + p1[1]) / 2)]); renderAll(); markDirty();
+    };
+    el.querySelector('.gGen').onclick = () => {
+      const mx = +el.querySelector('.gMax').value, ex = +el.querySelector('.gExp').value, dz = +el.querySelector('.gDz').value;
+      if (!(mx > 0 && ex > 0 && dz >= 0 && dz < 0.9)) { toast('Check the numbers', 'bad'); return; }
+      cfg[key].pts = sanitizePts(modelTable(mx, ex, dz)); renderAll(); markDirty();
+    };
+    box.appendChild(el);
+  }
+}
+
+// =================================================================================
+// Siege PC -> console
+// =================================================================================
+// Hipfire: degrees per mouse count = slider x (MouseSensitivityMultiplierUnit / 0.02) x 0.00572957795
+// ADS (Y5S3+): hipfire x (ADSMouseMultiplierUnit x ADS value) x FOVadj(optic); FOVadj = tan(m*vFOV/2)/tan(vFOV/2)
+const SIEGE_YAW = 0.00572957795;
+const SCOPES = [
+  { name: '1x', key: '1x', fov: 0.90 }, { name: '1.5x', key: '1xHalf', fov: 0.59 }, { name: '2x', key: '2x', fov: 0.49 },
+  { name: '2.5x', key: '2xHalf', fov: 0.42 }, { name: '3x', key: '3x', fov: 0.35 }, { name: '4x', key: '4x', fov: 0.30 },
+  { name: '5x', key: '5x', fov: 0.22 }, { name: '12x', key: '12x', fov: 0.092 },
+];
+const rad = d => d * Math.PI / 180;
+function fovAdj(mult, vfovDeg) { const v = rad(vfovDeg); return Math.tan(mult * v / 2) / Math.tan(v / 2); }
+function effectiveVfov(vfov, aspect) { const h = 2 * Math.atan(Math.tan(rad(vfov) / 2) * aspect); return h > rad(150) ? 2 * Math.atan(Math.tan(rad(75)) / aspect) * 180 / Math.PI : vfov; }
+function parseIni(text) { const o = {}; for (const line of text.split(/\r?\n/)) { const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/); if (m) o[m[1]] = m[2]; } return o; }
+function siegeCompute(ini, dpi) {
+  const num = (k, d) => { const v = parseFloat(ini[k]); return isFinite(v) ? v : d; };
+  const yaw = num('MouseYawSensitivity', 50), pitch = num('MousePitchSensitivity', yaw), mult = num('MouseSensitivityMultiplierUnit', 0.02);
+  const adsUnit = num('ADSMouseMultiplierUnit', num('XFactorAiming', 0.02));
+  const specific = num('ADSMouseUseSpecific', 0) === 1, global = num('ADSMouseSensitivityGlobal', num('AimDownSightsMouse', 50));
+  const aspect = num('ResolutionWidth', 1920) / num('ResolutionHeight', 1080) || 16 / 9;
+  const vfov = effectiveVfov(num('DefaultFOV', 90), aspect);
+  const hipDpc = yaw * (mult / 0.02) * SIEGE_YAW;
+  const cm = dpc => 360 / dpc / dpi * 2.54;
+  const scopes = SCOPES.map(s => { const ads = specific ? num('ADSMouseSensitivity' + s.key, global) : global; const dpc = hipDpc * adsUnit * ads * fovAdj(s.fov, vfov); return { ...s, ads, dpc, cm: cm(dpc) }; });
+  const CV = Math.min(90, Math.max(60, +$('siegeConFov').value || 90)), one = scopes[0];
+  const k = scopes.map(s => (s.dpc / one.dpc) * fovAdj(one.fov, CV) / fovAdj(s.fov, CV));
+  const c1 = Math.max(1, Math.min(100, Math.floor(200 / Math.max(...k))));
+  scopes.forEach((s, i) => {
+    s.console = Math.max(1, Math.min(200, Math.round(c1 * k[i])));
+    s.err = (s.console / (c1 * k[i]) - 1) * 100;
+    s.conRel = (s.console * fovAdj(s.fov, CV)) / (scopes[0].console * fovAdj(one.fov, CV));
+  });
+  return { yaw, pitch, mult, adsUnit, vfov, dpi, hipCm: cm(hipDpc), yRatio: pitch / yaw, scopes };
+}
+function renderSiege() {
+  $('siegeApply').disabled = !siege;
+  if (!siege) { $('siegePc').innerHTML = ''; return; }
+  const s = siege;
+  $('siegePc').innerHTML = `<table style="margin-top:10px"><tr><th>PC</th><th class="n">value</th><th class="n">cm / 360°</th></tr>
+    <tr><td>Hipfire (yaw / pitch)</td><td class="n">${s.yaw} / ${s.pitch}</td><td class="n"><b>${s.hipCm.toFixed(1)}</b></td></tr>
+    ${s.scopes.map(x => `<tr><td>ADS ${x.name}</td><td class="n">${x.ads}</td><td class="n">${x.cm.toFixed(1)}</td></tr>`).join('')}</table>
+    <p class="note">FOV ${s.vfov.toFixed(0)}°, multiplier ${s.mult}, ADS unit ${s.adsUnit}, ${s.dpi} DPI.</p>`;
+  $('siegeConsole').innerHTML = `<table><tr><th>Console setting</th><th class="n">set to</th></tr>
+    <tr><td>Horizontal / vertical sensitivity</td><td class="n">100 / 100</td></tr>
+    <tr><td>Look acceleration (hipfire)</td><td class="n">max, delay 0, ramp 0</td></tr>
+    <tr><td>Aim acceleration (ADS)</td><td class="n">0</td></tr>
+    <tr><td>Right stick deadzone</td><td class="n">lowest</td></tr>
+    <tr><td>ADS: use specific per zoom</td><td class="n">on</td></tr>
+    ${s.scopes.map(x => `<tr><td>ADS ${x.name}</td><td class="n"><b>${x.console}</b>${Math.abs(x.err) > 1.5 ? ` <span class="faint">(${x.err > 0 ? '+' : ''}${x.err.toFixed(1)}%)</span>` : ''}</td></tr>`).join('')}</table>
+    <p class="note">Per-zoom values keep every scope matched to your PC relative to 1x. Calibrate after changing acceleration settings.</p>`;
+  $('scopePick').innerHTML = s.scopes.slice(1).map((x, i) => `<option value="${i + 1}" ${x.name === '2.5x' ? 'selected' : ''}>${x.name}</option>`).join('');
+}
+$('siegeFileBtn').onclick = () => $('siegeFile').click();
+let siegeIni = null;
+$('siegeDpi').onchange = () => siegeAgain(); $('siegeConFov').onchange = () => siegeAgain();
+function siegeAgain() { if (!siegeIni) return; siege = siegeCompute(siegeIni, Math.max(50, +$('siegeDpi').value || cfg.dpi)); renderSiege(); }
+$('siegeFile').onchange = async () => {
+  const f = $('siegeFile').files[0]; if (!f) return;
+  const ini = parseIni(await f.text());
+  if (!('MouseYawSensitivity' in ini)) { toast("That doesn't look like Siege's GameSettings.ini", 'bad'); return; }
+  siegeIni = ini; $('siegeFileName').textContent = f.name; siegeAgain(); $('siegeFile').value = '';
+};
+$('siegeApply').onclick = () => {
+  if (!siege) return;
+  cfg.dpi = siege.dpi; cfg.hip.cm = f32(siege.hipCm); cfg.hip.y = f32(siege.yRatio);
+  cfg.ads.cm = f32(siege.scopes[0].cm); cfg.ads.y = f32(siege.yRatio); cfg.adsOn = 1;
+  renderAll(); markDirty();
+  $('siegeApplied').innerHTML = `<p class="note">Applied: hipfire ${cfg.hip.cm.toFixed(1)} cm, ADS ${cfg.ads.cm.toFixed(1)} cm, ${cfg.dpi} DPI. Save to keep it.</p>`;
+};
+$('scopeStart').onclick = async () => {
+  if (!needConn()) return;
+  if (!siege) { toast('Load your Siege settings first', 'bad'); return; }
+  stopCal(); await stick(1000); scopeT0 = performance.now(); $('scopeStart').disabled = true; $('scopeStop').disabled = false;
+  timer = setInterval(() => $('scopeTime').textContent = ((performance.now() - scopeT0) / 1000).toFixed(2), 40);
+};
+$('scopeStop').onclick = async () => {
+  const secs = (performance.now() - scopeT0) / 1000; stopCal(); $('scopeTime').textContent = secs.toFixed(2);
+  const sc = siege.scopes[+$('scopePick').value], turns = Math.max(1, +$('scopeTurns').value || 1);
+  const measured = 360 * turns / secs, expected = maxDps(cfg.ads) * sc.conRel, diff = (measured / expected - 1) * 100;
+  $('scopeResult').innerHTML = `<p class="note">${sc.name}: measured <b>${Math.round(measured)} °/s</b>, expected ${Math.round(expected)} °/s (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%). ${Math.abs(diff) <= 6 ? 'Matches.' : 'Off: this scope scales differently on console.'}</p>`;
+};
+
+// =================================================================================
+// Backups & profiles
+// =================================================================================
+const PROF_KEY = 'kestrel.profiles.v1';
+function loadProfiles() { try { return JSON.parse(localStorage.getItem(PROF_KEY) || '{}'); } catch (e) { return {}; } }
+function storeProfiles(p) { try { localStorage.setItem(PROF_KEY, JSON.stringify(p)); } catch (e) { toast('Could not save in this browser', 'bad'); } }
+function renderProfiles() {
+  const p = loadProfiles(), names = Object.keys(p).sort(), el = $('plist');
+  if (!names.length) { el.innerHTML = '<p class="dim">Nothing saved yet.</p>'; return; }
+  el.innerHTML = '';
+  for (const n of names) {
+    const row = document.createElement('div'); row.className = 'prow';
+    let info = ''; try { const c = decodeCfg(fromHex(p[n])); info = `hip ${(+c.hip.cm).toFixed(1)} · ads ${(+c.ads.cm).toFixed(1)} · ${c.binds.length} binds`; } catch (e) { info = 'unreadable'; }
+    row.innerHTML = `<div><div>${esc(n)}</div><div class="faint mono" style="font-size:11.5px">${info}</div></div><div class="row"><button class="sm">Load</button><button class="sm quiet">Delete</button></div>`;
+    const [load, del] = row.querySelectorAll('button');
+    load.onclick = () => offerConfig(p[n], `“${n}”`);
+    del.onclick = async () => { if (await ask('Delete profile?', `<p class="dim">“${esc(n)}” is removed from this browser.</p>`, 'Delete')) { delete p[n]; storeProfiles(p); renderProfiles(); } };
+    el.appendChild(row);
+  }
+}
+// Shows exactly what a profile/backup would change before using it (an old profile once wiped the binds).
+async function offerConfig(hex, label) {
+  let c; try { c = decodeCfg(fromHex(hex)); } catch (e) { toast('Unreadable: ' + e.message, 'bad'); return; }
+  const diff = summarize(cfg, c);
+  if (!diff.length) { toast(`${label} is the same as what you have`, 'ok'); return; }
+  const go = await ask(`Load ${label}?`, `<p class="dim" style="margin:0">This changes:</p><ul>${diff.map(d => `<li>${esc(d)}</li>`).join('')}</ul><p class="dim" style="margin:0">Nothing is sent to the adapter until you click Save.</p>`, 'Load');
+  if (go) { adopt(c); toast(`${label} loaded. Save to put it on the adapter.`, 'ok'); }
+}
+$('profSave').onclick = () => {
+  const n = $('profName').value.trim(); if (!n) { toast('Give it a name', 'bad'); return; }
+  const p = loadProfiles(); p[n] = toHex(encodeCfg(cfg)); storeProfiles(p); renderProfiles(); toast(`Saved “${n}”`, 'ok');
+};
+function download(name, text) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('bkSave').onclick = () => {
+  const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  download(`kestrel-${stamp}.hex`, toHex(encodeCfg(cfg)) + '\n');
+  if (isDirty()) toast('Downloaded. Note: it includes changes not saved to the adapter yet.');
+};
+$('bkLoadBtn').onclick = () => $('bkLoad').click();
+$('bkLoad').onchange = async () => {
+  const f = $('bkLoad').files[0]; if (!f) return;
+  const text = (await f.text()).trim();
+  let hex = null;
+  if (/^[0-9a-fA-F\s]+$/.test(text)) hex = text.replace(/\s+/g, '');
+  else { try { hex = JSON.parse(text).settings; } catch (e) {} }
+  if (!hex) toast('Not a Kestrel backup', 'bad'); else offerConfig(hex, f.name);
+  $('bkLoad').value = '';
+};
+
+// =================================================================================
+// Navigation, shortcuts, startup
+// =================================================================================
+const pageOn = id => $('p-' + id).classList.contains('on');
+function go(id) {
+  for (const b of $('nav').children) if (b.dataset) b.classList.toggle('on', b.dataset.p === id);
+  for (const s of document.querySelectorAll('.page')) s.classList.toggle('on', s.id === 'p-' + id);
+  if (id === 'log') renderLog();
+  if (id === 'keys') paintKeys();
+  if (id !== 'keys' && capture !== null) { capture = null; renderList(); }
+  if (activeRow !== null || dzTimer) stopCal();
+  try { localStorage.setItem('kestrel.page', id); } catch (e) {}
+}
+for (const b of $('nav').querySelectorAll('button')) b.onclick = () => go(b.dataset.p);
+const PAGES = ['aim', 'keys', 'live', 'cal', 'curves', 'siege', 'profiles', 'log'];
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (isDirty()) save(); else toast(connected ? 'Nothing to save' : 'Not connected'); return; }
+  const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName) && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range';
+  if (pageOn('keys') && !typing) {
+    const hid = CODE_TO_HID[e.code]; if (hid === undefined) return;
+    e.preventDefault();
+    if (capture !== null) addBind(hid, capture);
+    else if ($('kbView').style.display !== 'none') selectKey(hid);
+    return;
+  }
+  if (!typing && e.altKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); go(PAGES[+e.key - 1]); }
+});
+function renderAll() { renderFields(); paintKeys(); renderKeyPanel(); renderList(); renderCurves(); renderCal(); if (!$('siegeDpi').value) $('siegeDpi').value = cfg.dpi; }
+window.addEventListener('beforeunload', e => {
+  if (connected) { try { send('KST CAL -1'); } catch (x) {} }
+  if (isDirty()) { e.preventDefault(); e.returnValue = ''; }
+});
+
+if (!('serial' in navigator)) {
+  showMsg('bad', '<b>This browser can\'t talk to the adapter.</b> Open it in Chrome or Edge (start it with “Kestrel Config.bat”). You can still look around and edit profiles.');
+  $('btnConnect').disabled = true;
+} else {
+  navigator.serial.addEventListener('disconnect', e => { if (e.target === port) dropped('Adapter unplugged. Reconnects when you plug it back in.'); });
+  navigator.serial.addEventListener('connect', () => { if (!connected) setTimeout(autoConnect, 600); });
+  showMsg('', 'Plug the MAKCU\'s <b>middle port</b> into this PC and click <b>Connect</b> (pick the CH343 / COM3 port). After the first time it reconnects by itself.');
+}
+// Watchdog: an adapter that restarted forgets live mode, so ask again while nothing arrives.
+setInterval(() => {
+  if (!connected || !writer) return;
+  const now = Date.now();
+  if (now - lastPadAt > 2000 && now - lastPokeAt > 2000) {
+    lastPokeAt = now; send('KST LIVE 1').catch(() => {});
+    if (now - lastPadAt > 4000 && !silent) { silent = true; setConn('warn', 'Adapter not answering. Is it powered?'); }
+  }
+}, 500);
+
+buildKeyboard(); renderAll(); renderProfiles(); markDirty();
+try { const pg = localStorage.getItem('kestrel.page'); if (pg && PAGES.includes(pg)) go(pg); } catch (e) {}
+autoConnect();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# 1 ms scheduler tick so the 1 kHz input loop is not limited by FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+
+# Logs on UART0 (the MAKCU's USB pins are used for USB host, not for logs)
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# USB host: allow a hub, and large config descriptors (gaming keyboards)
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024

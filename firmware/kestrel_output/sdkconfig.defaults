@@ -1,0 +1,13 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_FREERTOS_HZ=1000
+
+# Logs on UART0 (on the MAKCU this side's USB port is the controller output).
+# Boot messages are at 115200; cfg_bridge.c switches the port to 921600 once running.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# TinyUSB: no built-in classes are enabled; the XInput class driver is in main/xinput.c
+CONFIG_TINYUSB_HID_COUNT=0
+CONFIG_TINYUSB_MIDI_COUNT=0
+CONFIG_TINYUSB_VENDOR_COUNT=0

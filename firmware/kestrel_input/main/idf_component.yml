@@ -1,0 +1,3 @@
+dependencies:
+  idf: ">=5.5"
+  # usb_host_hid is a local copy in components/usb_host_hid (adds hid_host_device_pause)
